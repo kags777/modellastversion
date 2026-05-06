@@ -1151,7 +1151,7 @@ namespace CafeSimulation
 
             const double EPSILON = 1.0;        // Заданная точность (в мин.)
             const double T_ALPHA = 1.895;      // Коэффициент Стьюдента для 90% доверия
-            const int INITIAL_RUNS = 30;        // Начальное количество прогонов
+            const int INITIAL_RUNS = 10;        // Начальное количество прогонов
             const int MAX_ITERATIONS = 10;     // Максимальное количество итераций
 
             // Моделирование для варианта 1 с обеспечением точности
@@ -1196,6 +1196,10 @@ namespace CafeSimulation
                 iteration++;
                 Console.WriteLine($"\n--- ИТЕРАЦИЯ {iteration}: выполняется {currentRuns} прогонов ---");
 
+                // Для хранения результатов текущей итерации
+                List<double> iterationWaitTimes = new List<double>();
+                List<double> iterationSystemTimes = new List<double>();
+
                 // Выполняем прогоны
                 for (int run = 1; run <= currentRuns; run++)
                 {
@@ -1206,9 +1210,26 @@ namespace CafeSimulation
                     else
                         simulation.RunVariant2();
 
+                    // Добавляем в общий список
                     results.WaitTimes.Add(simulation.AvgWaitTime);
+
+                    // Добавляем в список текущей итерации
+                    iterationWaitTimes.Add(simulation.AvgWaitTime);
+                    iterationSystemTimes.Add(simulation.AvgSystemTime);
+
+                    // Сохраняем последнюю симуляцию
                     results.LastSimulation = simulation;
+
+                    // Выводим результаты каждого прогона
+                    Console.WriteLine($"  Прогон {run,2}: Ср. время ожидания = {simulation.AvgWaitTime,6:F3} мин.");
                 }
+
+                // Выводим средние значения по итерации
+                double iterMeanWait = iterationWaitTimes.Average();
+                double iterMeanSystem = iterationSystemTimes.Average();
+                Console.WriteLine($"\n  >> ИТОГО ПО ИТЕРАЦИИ {iteration} <<");
+                Console.WriteLine($"     Среднее время ожидания: {iterMeanWait:F3} мин.");
+                Console.WriteLine($"     Среднее время пребывания: {iterMeanSystem:F3} мин.");
 
                 // Анализ точности
                 if (results.WaitTimes.Count >= 2)
@@ -1223,20 +1244,21 @@ namespace CafeSimulation
                     results.RequiredN = requiredN;
                     results.TotalRuns = results.WaitTimes.Count;
 
-                    Console.WriteLine($"  Среднее время ожидания: {mean:F3} мин.");
+                    Console.WriteLine($"\n--- АНАЛИЗ ТОЧНОСТИ (всего прогонов: {results.WaitTimes.Count}) ---");
+                    Console.WriteLine($"  Общее среднее время ожидания: {mean:F3} мин.");
                     Console.WriteLine($"  Среднеквадратическое отклонение (σ): {sigma:F3} мин.");
                     Console.WriteLine($"  Необходимое число реализаций (N*): {requiredN:F2}");
 
                     if (requiredN <= results.WaitTimes.Count)
                     {
-                        Console.WriteLine($"   Требуемая точность достигнута!");
+                        Console.WriteLine($"  ✓ Требуемая точность достигнута!");
                         accuracyAchieved = true;
                         results.AccuracyAchieved = true;
                     }
                     else
                     {
                         int additionalNeeded = (int)Math.Ceiling(requiredN - results.WaitTimes.Count);
-                        Console.WriteLine($"   Требуемая точность НЕ достигнута. Необходимо добавить {additionalNeeded} прогонов.");
+                        Console.WriteLine($"  ✗ Требуемая точность НЕ достигнута. Необходимо добавить {additionalNeeded} прогонов.");
                         currentRuns = additionalNeeded;
                     }
                 }
@@ -1245,11 +1267,13 @@ namespace CafeSimulation
                     Console.WriteLine($"  Недостаточно данных для анализа точности (нужно минимум 2 прогона)");
                     currentRuns = 5;
                 }
+
+                Console.WriteLine(new string('-', 70));
             }
 
             if (!accuracyAchieved)
             {
-                Console.WriteLine($"\n Внимание: максимальное количество итераций ({maxIterations}) достигнуто.");
+                Console.WriteLine($"\n⚠ Внимание: максимальное количество итераций ({maxIterations}) достигнуто.");
                 if (results.WaitTimes.Count > 0)
                 {
                     results.MeanWaitTime = results.WaitTimes.Average();
