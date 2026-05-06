@@ -177,18 +177,16 @@ namespace CafeSimulation
         private PriorityQueue<Event, double> _eventQueue;
         private int _nextCustomerId;
 
+        private const double SIMULATION_TIME = 540;  // 9 часов = 540 минут
         private const int TOTAL_TRAYS = 30;
 
         private int _totalCustomers;
         private int _servedCustomers;
         private double _totalSystemTime;
         private double _totalWaitTime;
-        private double _simulationEndTime;
-        private bool _simulationStopped;
 
         private int _freeTrays;
         private int _activeCustomers;
-        private int _totalTraysIssued;
 
         // Вариант 1
         private Fragment1 _firstDishStage1;
@@ -255,9 +253,7 @@ namespace CafeSimulation
             _nextCustomerId = 1;
             _freeTrays = TOTAL_TRAYS;
             _activeCustomers = 0;
-            _totalTraysIssued = 0;
             _currentTime = 0;
-            _simulationStopped = false;
         }
 
         #region Инициализация
@@ -325,46 +321,44 @@ namespace CafeSimulation
 
         private bool CanStartNewCustomer()
         {
-            if (_totalTraysIssued >= TOTAL_TRAYS)
-            {
-                if (_servedCustomers >= TOTAL_TRAYS)
-                {
-                    _simulationStopped = true;
-                    _simulationEndTime = _currentTime;
-                }
+            // Проверяем наличие свободных подносов
+            if (_freeTrays <= 0)
                 return false;
-            }
             return true;
+        }
+
+        private bool IsSimulationComplete()
+        {
+            return _currentTime >= SIMULATION_TIME;
         }
 
         private void ProcessArrivalV1(Event evt)
         {
-            if (_simulationStopped) return;
+            if (IsSimulationComplete()) return;
 
             if (evt.Type == EventType.GroupArrival)
             {
-                if (_totalTraysIssued < TOTAL_TRAYS)
-                {
-                    double nextInterval = Exponential(3.0);
+                double nextInterval = Exponential(3.0);
+                if (_currentTime + nextInterval < SIMULATION_TIME)
                     ScheduleEvent(EventType.GroupArrival, _currentTime + nextInterval, null);
-                }
 
                 int groupSize = GetGroupSize();
                 for (int i = 0; i < groupSize; i++)
                 {
-                    if (_totalTraysIssued >= TOTAL_TRAYS) break;
-
                     var customer = CreateCustomerV1();
                     ScheduleEvent(EventType.CustomerArrival, _currentTime, customer);
                 }
             }
             else if (evt.Type == EventType.CustomerArrival)
             {
-                if (!CanStartNewCustomer()) return;
+                if (!CanStartNewCustomer())
+                {
+                    // Если нет свободных подносов, посетитель уходит (не обслуживается)
+                    return;
+                }
 
                 var customer = evt.Customer;
                 _totalCustomers++;
-                _totalTraysIssued++;
                 customer.EntryTime = _currentTime;
                 customer.HasTray = true;
                 _activeCustomers++;
@@ -709,21 +703,17 @@ namespace CafeSimulation
 
         private void ProcessArrivalV2(Event evt)
         {
-            if (_simulationStopped) return;
+            if (IsSimulationComplete()) return;
 
             if (evt.Type == EventType.GroupArrival)
             {
-                if (_totalTraysIssued < TOTAL_TRAYS)
-                {
-                    double nextInterval = Exponential(3.0);
+                double nextInterval = Exponential(3.0);
+                if (_currentTime + nextInterval < SIMULATION_TIME)
                     ScheduleEvent(EventType.GroupArrival, _currentTime + nextInterval, null);
-                }
 
                 int groupSize = GetGroupSize();
                 for (int i = 0; i < groupSize; i++)
                 {
-                    if (_totalTraysIssued >= TOTAL_TRAYS) break;
-
                     var customer = CreateCustomerV2();
                     ScheduleEvent(EventType.CustomerArrival, _currentTime, customer);
                 }
@@ -734,7 +724,6 @@ namespace CafeSimulation
 
                 var customer = evt.Customer;
                 _totalCustomers++;
-                _totalTraysIssued++;
                 customer.EntryTime = _currentTime;
                 customer.HasTray = true;
                 _activeCustomers++;
@@ -1043,7 +1032,7 @@ namespace CafeSimulation
 
             ScheduleEvent(EventType.GroupArrival, 0, null);
 
-            while (_eventQueue.Count > 0 && !_simulationStopped)
+            while (_eventQueue.Count > 0 && !IsSimulationComplete())
             {
                 var evt = _eventQueue.Dequeue();
                 _currentTime = evt.Time;
@@ -1082,7 +1071,7 @@ namespace CafeSimulation
 
             ScheduleEvent(EventType.GroupArrival, 0, null);
 
-            while (_eventQueue.Count > 0 && !_simulationStopped)
+            while (_eventQueue.Count > 0 && !IsSimulationComplete())
             {
                 var evt = _eventQueue.Dequeue();
                 _currentTime = evt.Time;
@@ -1120,12 +1109,10 @@ namespace CafeSimulation
             _nextCustomerId = 1;
             _freeTrays = TOTAL_TRAYS;
             _activeCustomers = 0;
-            _totalTraysIssued = 0;
             _totalCustomers = 0;
             _servedCustomers = 0;
             _totalSystemTime = 0;
             _totalWaitTime = 0;
-            _simulationStopped = false;
             _eventQueue.Clear();
 
             // Сброс статистики варианта 1
@@ -1158,8 +1145,8 @@ namespace CafeSimulation
         {
             Console.OutputEncoding = Encoding.UTF8;
             Console.WriteLine(" МОДЕЛИРОВАНИЕ РАБОТЫ КАФЕ");
-            Console.WriteLine("Ограничение: 30 подносов (обслуживается ровно 30 человек)");
-            Console.WriteLine("Моделирование завершается после обслуживания 30 посетителей");
+            Console.WriteLine("Время моделирования: 9 часов (540 минут)");
+            Console.WriteLine("Ограничение: 30 подносов");
             Console.WriteLine("Запуск моделирования...\n");
 
             const double EPSILON = 1.0;        // Заданная точность (в мин.)
@@ -1242,14 +1229,14 @@ namespace CafeSimulation
 
                     if (requiredN <= results.WaitTimes.Count)
                     {
-                        Console.WriteLine($"  ✓ Требуемая точность достигнута!");
+                        Console.WriteLine($"   Требуемая точность достигнута!");
                         accuracyAchieved = true;
                         results.AccuracyAchieved = true;
                     }
                     else
                     {
                         int additionalNeeded = (int)Math.Ceiling(requiredN - results.WaitTimes.Count);
-                        Console.WriteLine($"  ✗ Требуемая точность НЕ достигнута. Необходимо добавить {additionalNeeded} прогонов.");
+                        Console.WriteLine($"   Требуемая точность НЕ достигнута. Необходимо добавить {additionalNeeded} прогонов.");
                         currentRuns = additionalNeeded;
                     }
                 }
@@ -1262,7 +1249,7 @@ namespace CafeSimulation
 
             if (!accuracyAchieved)
             {
-                Console.WriteLine($"\n⚠ Внимание: максимальное количество итераций ({maxIterations}) достигнуто.");
+                Console.WriteLine($"\n Внимание: максимальное количество итераций ({maxIterations}) достигнуто.");
                 if (results.WaitTimes.Count > 0)
                 {
                     results.MeanWaitTime = results.WaitTimes.Average();
@@ -1281,25 +1268,29 @@ namespace CafeSimulation
             var sim = results.LastSimulation;
             if (sim != null)
             {
-                Console.WriteLine($"Моделирование завершено: обслужено 30 человек.");
+                Console.WriteLine($"Моделирование завершено по времени: 9 часов (540 мин.)");
                 Console.WriteLine($"Всего вошло в систему: {sim.TotalCustomers}");
-                Console.WriteLine($"Обслужено полностью: 30");
-                Console.WriteLine($"Не обслужено (остались в системе): {sim.TotalCustomers - 30}");
+                Console.WriteLine($"Обслужено полностью: {sim.TotalCustomers}");
+
+                // Вычисляем процент потерянных посетителей из-за отсутствия подносов
+                int lostCustomers = Math.Abs(sim.TotalCustomers - (sim.FirstDishTaken + sim.SecondDishTaken + sim.BreadTaken));
+                Console.WriteLine($"Потеряно из-за отсутствия подносов: {lostCustomers}");
 
                 Console.WriteLine($"Среднее время пребывания в системе: {sim.AvgSystemTime:F2} мин.");
                 Console.WriteLine($"Среднее время ожидания в очередях: {results.MeanWaitTime:F2} мин.");
 
                 Console.WriteLine($"\nСТАТИСТИКА ПО БЛЮДАМ (ВАРИАНТ 1)");
-                Console.WriteLine($"Получили первое блюдо: {sim.FirstDishTaken} ({(sim.FirstDishTaken * 100.0 / 30):F1}%)");
-                Console.WriteLine($"Получили второе блюдо: {sim.SecondDishTaken} ({(sim.SecondDishTaken * 100.0 / 30):F1}%)");
-                Console.WriteLine($"Взяли сок: {sim.JuiceTaken} ({(sim.JuiceTaken * 100.0 / 30):F1}%)");
-                Console.WriteLine($"Взяли чай: {sim.TeaTaken} ({(sim.TeaTaken * 100.0 / 30):F1}%)");
-                Console.WriteLine($"Взяли хлебобулочные: {sim.BreadTaken} ({(sim.BreadTaken * 100.0 / 30):F1}%)");
-                Console.WriteLine($"Число людей, испытавших возмущающее воздействие: {sim.DisturbanceCount} ({(sim.DisturbanceCount * 100.0 / 30):F1}%)");
+                Console.WriteLine($"Получили первое блюдо: {sim.FirstDishTaken} ({(sim.FirstDishTaken * 100.0 / sim.TotalCustomers):F1}%)");
+                Console.WriteLine($"Получили второе блюдо: {sim.SecondDishTaken} ({(sim.SecondDishTaken * 100.0 / sim.TotalCustomers):F1}%)");
+                Console.WriteLine($"Взяли сок: {sim.JuiceTaken} ({(sim.JuiceTaken * 100.0 / sim.TotalCustomers):F1}%)");
+                Console.WriteLine($"Взяли чай: {sim.TeaTaken} ({(sim.TeaTaken * 100.0 / sim.TotalCustomers):F1}%)");
+                Console.WriteLine($"Взяли хлебобулочные: {sim.BreadTaken} ({(sim.BreadTaken * 100.0 / sim.TotalCustomers):F1}%)");
+                Console.WriteLine($"Число людей, испытавших возмущающее воздействие: {sim.DisturbanceCount} ({(sim.DisturbanceCount * 100.0 / sim.TotalCustomers):F1}%)");
                 Console.WriteLine($"Число людей, которым не понадобилось обслуживание: {sim.NoServiceNeeded}");
 
                 Console.WriteLine($"Среднее время обслуживания: {sim.AvgServiceTime:F2} мин.");
                 Console.WriteLine($"Среднее время получения обеда: {sim.AvgMealTime:F2} мин.");
+                Console.WriteLine($"Загруженность кассы: {(sim.AvgServiceTime > 0 ? (sim.AvgServiceTime / sim.AvgSystemTime * 100) : 0):F1}% от времени в системе");
             }
 
             // Вывод информации о точности
@@ -1324,23 +1315,27 @@ namespace CafeSimulation
             var sim = results.LastSimulation;
             if (sim != null)
             {
-                Console.WriteLine($"Моделирование завершено: обслужено 30 человек.");
+                Console.WriteLine($"Моделирование завершено по времени: 9 часов (540 мин.)");
                 Console.WriteLine($"Всего вошло в систему: {sim.TotalCustomers}");
-                Console.WriteLine($"Обслужено полностью: 30");
-                Console.WriteLine($"Не обслужено (остались в системе): {sim.TotalCustomers - 30}");
+                Console.WriteLine($"Обслужено полностью: {sim.TotalCustomers}");
+
+                // Вычисляем процент потерянных посетителей из-за отсутствия подносов
+                int lostCustomers = Math.Abs(sim.TotalCustomers - (sim.FirstDishTaken + sim.SecondDishTaken + sim.SaladTaken));
+                Console.WriteLine($"Потеряно из-за отсутствия подносов: {lostCustomers}");
 
                 Console.WriteLine($"Среднее время пребывания в системе: {sim.AvgSystemTime:F2} мин.");
                 Console.WriteLine($"Среднее время ожидания в очередях: {results.MeanWaitTime:F2} мин.");
 
                 Console.WriteLine($"\nСТАТИСТИКА ПО БЛЮДАМ (ВАРИАНТ 2)");
-                Console.WriteLine($"Получили первое блюдо: {sim.FirstDishTaken} ({(sim.FirstDishTaken * 100.0 / 30):F1}%)");
-                Console.WriteLine($"Получили второе блюдо: {sim.SecondDishTaken} ({(sim.SecondDishTaken * 100.0 / 30):F1}%)");
-                Console.WriteLine($"Получили салат: {sim.SaladTaken} ({(sim.SaladTaken * 100.0 / 30):F1}%)");
-                Console.WriteLine($"Получили напиток: {sim.DrinkTaken} ({(sim.DrinkTaken * 100.0 / 30):F1}%)");
+                Console.WriteLine($"Получили первое блюдо: {sim.FirstDishTaken} ({(sim.FirstDishTaken * 100.0 / sim.TotalCustomers):F1}%)");
+                Console.WriteLine($"Получили второе блюдо: {sim.SecondDishTaken} ({(sim.SecondDishTaken * 100.0 / sim.TotalCustomers):F1}%)");
+                Console.WriteLine($"Получили салат: {sim.SaladTaken} ({(sim.SaladTaken * 100.0 / sim.TotalCustomers):F1}%)");
+                Console.WriteLine($"Получили напиток: {sim.DrinkTaken} ({(sim.DrinkTaken * 100.0 / sim.TotalCustomers):F1}%)");
                 Console.WriteLine($"Число людей, которым не понадобилось обслуживание: {sim.NoServiceNeeded}");
 
                 Console.WriteLine($"Среднее время обслуживания: {sim.AvgServiceTime:F2} мин.");
                 Console.WriteLine($"Среднее время получения обеда: {sim.AvgMealTime:F2} мин.");
+                Console.WriteLine($"Загруженность кассы: {(sim.AvgServiceTime > 0 ? (sim.AvgServiceTime / sim.AvgSystemTime * 100) : 0):F1}% от времени в системе");
 
                 Console.WriteLine($"\n--- Отказы ---");
                 Console.WriteLine($"Отказов от первого блюда: {sim.RejectFirstMealResult}");
@@ -1363,5 +1358,3 @@ namespace CafeSimulation
         }
     }
 }
-
-
