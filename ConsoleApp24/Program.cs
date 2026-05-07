@@ -722,6 +722,24 @@ namespace CafeSimulation
                 else if (evt.Type == EventType.ServiceComplete)
                     CompleteServiceV1(evt);
             }
+
+            // Сохраняем результаты дня
+            FirstDishTaken = _firstDishTakenV1;
+            SecondDishTaken = _secondDishTakenV1;
+            JuiceTaken = _juiceTakenV1;
+            TeaTaken = _teaTakenV1;
+            BreadTaken = _breadTakenV1;
+            DisturbanceCount = _disturbanceCountV1;
+            NoServiceNeeded = _noServiceNeededV1;
+            TotalCustomers = _totalCustomers;
+
+            if (_servedCustomers > 0)
+            {
+                AvgSystemTime = _totalSystemTime / _servedCustomers;
+                AvgWaitTime = _totalWaitTime / _servedCustomers;
+                AvgServiceTime = _totalServiceTimeV1 / _servedCustomers;
+                AvgMealTime = _totalMealTimeV1 / _servedCustomers;
+            }
         }
 
         #endregion
@@ -1063,6 +1081,26 @@ namespace CafeSimulation
                 else if (evt.Type == EventType.ServiceComplete)
                     CompleteServiceV2(evt);
             }
+
+            // Сохраняем результаты дня
+            FirstDishTaken = _firstDishTakenV2;
+            SecondDishTaken = _secondDishTakenV2;
+            SaladTaken = _saladTakenV2;
+            DrinkTaken = _drinkTakenV2;
+            NoServiceNeeded = _noServiceNeededV2;
+            TotalCustomers = _totalCustomers;
+            RejectFirstMealResult = RejectFirstMeal;
+            RejectDrinkResult = RejectDrink;
+            RejectFirstMealPercent = TotalCustomers > 0 ? (double)RejectFirstMeal / TotalCustomers * 100 : 0;
+            RejectDrinkPercent = TotalCustomers > 0 ? (double)RejectDrink / TotalCustomers * 100 : 0;
+
+            if (_servedCustomers > 0)
+            {
+                AvgSystemTime = _totalSystemTime / _servedCustomers;
+                AvgWaitTime = _totalWaitTime / _servedCustomers;
+                AvgServiceTime = _totalServiceTimeV2 / _servedCustomers;
+                AvgMealTime = _totalMealTimeV2 / _servedCustomers;
+            }
         }
 
         #endregion
@@ -1082,8 +1120,20 @@ namespace CafeSimulation
             _eventQueue.Enqueue(evt, time);
         }
 
-        // Одна реализация = 3 дня по 9 часов для варианта 1
+        // Одна реализация = 3 дня по 9 часов для варианта 1 (по умолчанию)
         public void RunMultiDayV1()
+        {
+            RunMultiDayWithDaysV1(3);
+        }
+
+        // Одна реализация = 3 дня по 9 часов для варианта 2 (по умолчанию)
+        public void RunMultiDayV2()
+        {
+            RunMultiDayWithDaysV2(3);
+        }
+
+        // Метод для запуска варианта 1 с произвольным количеством дней
+        public void RunMultiDayWithDaysV1(int daysCount)
         {
             // Сброс общей статистики
             _firstDishTakenV1 = 0;
@@ -1100,7 +1150,7 @@ namespace CafeSimulation
             _totalSystemTime = 0;
             _totalWaitTime = 0;
 
-            for (int day = 1; day <= 3; day++)
+            for (int day = 1; day <= daysCount; day++)
             {
                 RunSingleDayV1();
 
@@ -1137,8 +1187,8 @@ namespace CafeSimulation
             }
         }
 
-        // Одна реализация = 3 дня по 9 часов для варианта 2
-        public void RunMultiDayV2()
+        // Метод для запуска варианта 2 с произвольным количеством дней
+        public void RunMultiDayWithDaysV2(int daysCount)
         {
             _firstDishTakenV2 = 0;
             _secondDishTakenV2 = 0;
@@ -1154,7 +1204,7 @@ namespace CafeSimulation
             int totalRejectFirst = 0;
             int totalRejectDrink = 0;
 
-            for (int day = 1; day <= 3; day++)
+            for (int day = 1; day <= daysCount; day++)
             {
                 RunSingleDayV2();
 
@@ -1193,9 +1243,31 @@ namespace CafeSimulation
             }
         }
 
+        // Универсальный метод
+        public void RunMultiDayWithDays(int daysCount)
+        {
+            // Выбираем вариант на основе текущего состояния (костыль для совместимости)
+            // В реальном коде лучше разделить
+            if (_firstDishStage1 != null || true) // упрощённо
+            {
+                RunMultiDayWithDaysV1(daysCount);
+                // Также сохраняем данные для варианта 2
+                var tempSim = new CafeSimulation();
+                tempSim.RunMultiDayWithDaysV2(daysCount);
+                _saladTakenV2 = tempSim.SaladTaken;
+                _drinkTakenV2 = tempSim.DrinkTaken;
+                RejectFirstMealResult = tempSim.RejectFirstMealResult;
+                RejectDrinkResult = tempSim.RejectDrinkResult;
+                RejectFirstMealPercent = tempSim.RejectFirstMealPercent;
+                RejectDrinkPercent = tempSim.RejectDrinkPercent;
+                SaladTaken = tempSim.SaladTaken;
+                DrinkTaken = tempSim.DrinkTaken;
+            }
+        }
+
         // Совместимость со старым интерфейсом
-        public void RunVariant1() => RunMultiDayV1();
-        public void RunVariant2() => RunMultiDayV2();
+        public void RunVariant1() => RunMultiDayWithDaysV1(3);
+        public void RunVariant2() => RunMultiDayWithDaysV2(3);
 
         private void Reset()
         {
@@ -1298,6 +1370,9 @@ namespace CafeSimulation
             if (resultsV2List.Last().LastSimulation != null)
                 PrintDetailedResults(resultsV2List.Last().LastSimulation, 2);
 
+            // НОВОЕ: Исследование влияния количества дней в реализации
+            RunDaysComparison();
+
             Console.WriteLine("\n" + new string('=', 70));
             Console.WriteLine("Моделирование завершено. Нажмите любую клавишу для выхода...");
             Console.ReadKey();
@@ -1314,6 +1389,20 @@ namespace CafeSimulation
             public CafeSimulation LastSimulation { get; set; }
             public double RelativeEpsilon { get; set; }
             public int IterationsCount { get; set; }
+        }
+
+        class DaysComparisonResult
+        {
+            public int DaysInRun { get; set; }
+            public double MeanWaitTime { get; set; }
+            public double Sigma { get; set; }
+            public double RequiredN { get; set; }
+            public int TotalRuns { get; set; }
+            public bool AccuracyAchieved { get; set; }
+            public int IterationsCount { get; set; }
+            public double TotalSimulatedHours { get; set; }
+            public double TotalSimulatedMinutes { get; set; }
+            public CafeSimulation LastSimulation { get; set; }
         }
 
         static AccuracyResults RunWithRelativeAccuracy(double relativeEpsilon, double tAlpha, int initialRuns, int maxIterations, bool runVariant1)
@@ -1350,7 +1439,6 @@ namespace CafeSimulation
                     double variance = results.WaitTimes.Select(v => Math.Pow(v - mean, 2)).Sum() / (results.WaitTimes.Count - 1);
                     double sigma = Math.Sqrt(variance);
 
-                    // Абсолютная погрешность = относительная * среднее
                     double absoluteEpsilon = relativeEpsilon * mean;
                     double requiredN = Math.Ceiling((sigma * sigma / (absoluteEpsilon * absoluteEpsilon)) * tAlpha * tAlpha);
 
@@ -1475,6 +1563,240 @@ namespace CafeSimulation
                 Console.WriteLine($"  Отказов от напитка: {sim.RejectDrinkResult} ({sim.RejectDrinkPercent:F1}%)");
             }
             Console.WriteLine($"\nЧисло людей, которым не понадобилось обслуживание: {sim.NoServiceNeeded}");
+        }
+
+        // НОВЫЙ МЕТОД: Исследование влияния количества дней в реализации
+        static void RunDaysComparison()
+        {
+            const double FIXED_EPSILON = 0.05;  // Фиксированная погрешность 5%
+            const double T_ALPHA = 1.895;
+            const int INITIAL_RUNS = 10;
+            const int MAX_ITERATIONS = 10;
+            int[] daysOptions = { 1, 3, 10 };
+
+            Console.WriteLine("\n" + new string('=', 90));
+            Console.WriteLine($"ИССЛЕДОВАНИЕ ВЛИЯНИЯ КОЛИЧЕСТВА ДНЕЙ В РЕАЛИЗАЦИИ (ε = {FIXED_EPSILON * 100}%)");
+            Console.WriteLine(new string('=', 90));
+
+            // Для варианта 1
+            Console.WriteLine("\n" + new string('=', 90));
+            Console.WriteLine("ВАРИАНТ 1");
+            Console.WriteLine(new string('=', 90));
+
+            var resultsV1Days = new List<DaysComparisonResult>();
+
+            foreach (int days in daysOptions)
+            {
+                Console.WriteLine($"\n>>> {days} ДНЕЙ В ОДНОЙ РЕАЛИЗАЦИИ (всего {days * 9} часов) <<<\n");
+
+                var result = RunWithRelativeAccuracyForDays(FIXED_EPSILON, T_ALPHA, INITIAL_RUNS, MAX_ITERATIONS, runVariant1: true, daysInRun: days);
+                resultsV1Days.Add(result);
+
+                PrintDaysResult(result, days);
+                Console.WriteLine(new string('-', 90));
+            }
+
+            // Для варианта 2
+            Console.WriteLine("\n" + new string('=', 90));
+            Console.WriteLine("ВАРИАНТ 2");
+            Console.WriteLine(new string('=', 90));
+
+            var resultsV2Days = new List<DaysComparisonResult>();
+
+            foreach (int days in daysOptions)
+            {
+                Console.WriteLine($"\n>>> {days} ДНЕЙ В ОДНОЙ РЕАЛИЗАЦИИ (всего {days * 9} часов) <<<\n");
+
+                var result = RunWithRelativeAccuracyForDays(FIXED_EPSILON, T_ALPHA, INITIAL_RUNS, MAX_ITERATIONS, runVariant1: false, daysInRun: days);
+                resultsV2Days.Add(result);
+
+                PrintDaysResult(result, days);
+                Console.WriteLine(new string('-', 90));
+            }
+
+            // Сводная таблица для варианта 1
+            Console.WriteLine("\n" + new string('=', 90));
+            Console.WriteLine("СВОДНАЯ ТАБЛИЦА ДЛЯ ВАРИАНТА 1 (ε = 5%)");
+            Console.WriteLine(new string('=', 90));
+            PrintDaysSummaryTable(resultsV1Days, daysOptions);
+
+            // Сводная таблица для варианта 2
+            Console.WriteLine("\n" + new string('=', 90));
+            Console.WriteLine("СВОДНАЯ ТАБЛИЦА ДЛЯ ВАРИАНТА 2 (ε = 5%)");
+            Console.WriteLine(new string('=', 90));
+            PrintDaysSummaryTable(resultsV2Days, daysOptions);
+
+            // Анализ эффективности
+            Console.WriteLine("\n" + new string('=', 90));
+            Console.WriteLine("АНАЛИЗ ЭФФЕКТИВНОСТИ");
+            Console.WriteLine(new string('=', 90));
+            AnalyzeEfficiency(resultsV1Days, resultsV2Days, daysOptions);
+        }
+
+        static DaysComparisonResult RunWithRelativeAccuracyForDays(double relativeEpsilon, double tAlpha, int initialRuns, int maxIterations, bool runVariant1, int daysInRun)
+        {
+            var result = new DaysComparisonResult();
+            result.DaysInRun = daysInRun;
+            result.TotalSimulatedHours = daysInRun * 9;
+            result.TotalSimulatedMinutes = daysInRun * 540;
+
+            List<double> waitTimes = new List<double>();
+            int currentRuns = initialRuns;
+            int iteration = 0;
+            bool accuracyAchieved = false;
+
+            while (!accuracyAchieved && iteration < maxIterations)
+            {
+                iteration++;
+                Console.WriteLine($"--- ИТЕРАЦИЯ {iteration}: выполняется {currentRuns} реализаций (каждая = {daysInRun} дня) ---");
+
+                for (int run = 1; run <= currentRuns; run++)
+                {
+                    var simulation = new CafeSimulation();
+
+                    if (runVariant1)
+                        simulation.RunMultiDayWithDaysV1(daysInRun);
+                    else
+                        simulation.RunMultiDayWithDaysV2(daysInRun);
+
+                    waitTimes.Add(simulation.AvgWaitTime);
+                    result.LastSimulation = simulation;
+
+                    Console.WriteLine($"  Реализация {run,2}: Ср. время ожидания = {simulation.AvgWaitTime,6:F3} мин.");
+                }
+
+                if (waitTimes.Count >= 2)
+                {
+                    double mean = waitTimes.Average();
+                    double variance = waitTimes.Select(v => Math.Pow(v - mean, 2)).Sum() / (waitTimes.Count - 1);
+                    double sigma = Math.Sqrt(variance);
+
+                    double absoluteEpsilon = relativeEpsilon * mean;
+                    double requiredN = Math.Ceiling((sigma * sigma / (absoluteEpsilon * absoluteEpsilon)) * tAlpha * tAlpha);
+
+                    result.MeanWaitTime = mean;
+                    result.Sigma = sigma;
+                    result.RequiredN = requiredN;
+                    result.TotalRuns = waitTimes.Count;
+                    result.IterationsCount = iteration;
+
+                    Console.WriteLine($"\n  Текущее среднее время ожидания: {mean:F3} мин.");
+                    Console.WriteLine($"  Заданная относительная погрешность: {relativeEpsilon * 100}%");
+                    Console.WriteLine($"  Соответствующая абсолютная погрешность: {absoluteEpsilon:F3} мин.");
+                    Console.WriteLine($"  Среднеквадратическое отклонение (σ): {sigma:F3} мин.");
+                    Console.WriteLine($"  Необходимое число реализаций (N*): {requiredN:F0}");
+
+                    if (requiredN <= waitTimes.Count)
+                    {
+                        Console.WriteLine($"  ✓ Требуемая точность достигнута!");
+                        accuracyAchieved = true;
+                        result.AccuracyAchieved = true;
+                    }
+                    else
+                    {
+                        int additionalNeeded = (int)Math.Ceiling(requiredN - waitTimes.Count);
+                        Console.WriteLine($"  ✗ Требуемая точность НЕ достигнута. Необходимо добавить {additionalNeeded} реализаций.");
+                        currentRuns = additionalNeeded;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"  Недостаточно данных для анализа точности (нужно минимум 2 реализации)");
+                    currentRuns = 5;
+                }
+                Console.WriteLine();
+            }
+
+            if (!accuracyAchieved)
+            {
+                Console.WriteLine($"\n⚠ Внимание: максимальное количество итераций ({maxIterations}) достигнуто.");
+                if (waitTimes.Count > 0)
+                {
+                    result.MeanWaitTime = waitTimes.Average();
+                }
+            }
+
+            return result;
+        }
+
+        static void PrintDaysResult(DaysComparisonResult result, int days)
+        {
+            const double T_ALPHA = 1.895;
+            double intervalHalfWidth = T_ALPHA * result.Sigma / Math.Sqrt(result.TotalRuns);
+            double actualRelativeError = (intervalHalfWidth / result.MeanWaitTime) * 100;
+
+            Console.WriteLine($"\n=== РЕЗУЛЬТАТ ДЛЯ {days} ДНЕЙ В РЕАЛИЗАЦИИ ===");
+            Console.WriteLine($"  Всего моделируемых часов: {result.TotalSimulatedHours} ч ({result.TotalSimulatedMinutes} мин)");
+            Console.WriteLine($"  Среднее время ожидания: {result.MeanWaitTime:F3} мин.");
+            Console.WriteLine($"  Среднеквадратическое отклонение (σ): {result.Sigma:F3} мин.");
+            Console.WriteLine($"  Фактическое число реализаций: {result.TotalRuns}");
+            Console.WriteLine($"  Необходимое число реализаций (N*): {result.RequiredN:F0}");
+            Console.WriteLine($"  Количество итераций: {result.IterationsCount}");
+            Console.WriteLine($"  Доверительный интервал (90%): [{result.MeanWaitTime - intervalHalfWidth:F3}; {result.MeanWaitTime + intervalHalfWidth:F3}] мин.");
+            Console.WriteLine($"  Фактическая относительная погрешность: {actualRelativeError:F2}%");
+            Console.WriteLine($"  Точность: {(result.AccuracyAchieved ? "ДОСТИГНУТА ✓" : "НЕ ДОСТИГНУТА ✗")}");
+        }
+
+        static void PrintDaysSummaryTable(List<DaysComparisonResult> results, int[] daysOptions)
+        {
+            Console.WriteLine("\n┌──────────────┬────────────────┬────────────────┬────────────────┬────────────────────┬────────────────────┬────────────────────┐");
+            Console.WriteLine("│ Дней в одной │  Среднее время │   СКО (σ)      │  Реализаций    │  Необходимо N*     │  Фактическая       │  Всего часов       │");
+            Console.WriteLine("│ реализации   │  ожидания (мин)│   (мин)        │  (факт)        │                    │  погрешность (%)   │  моделирования     │");
+            Console.WriteLine("├──────────────┼────────────────┼────────────────┼────────────────┼────────────────────┼────────────────────┼────────────────────┤");
+
+            const double T_ALPHA = 1.895;
+            for (int i = 0; i < results.Count; i++)
+            {
+                var res = results[i];
+                double intervalHalfWidth = T_ALPHA * res.Sigma / Math.Sqrt(res.TotalRuns);
+                double actualRelativeError = (intervalHalfWidth / res.MeanWaitTime) * 100;
+                int totalHours = daysOptions[i] * 9;
+
+                Console.WriteLine($"│ {daysOptions[i],12} │ {res.MeanWaitTime,14:F3} │ {res.Sigma,14:F3} │ {res.TotalRuns,14} │ {res.RequiredN,18:F0} │ {actualRelativeError,18:F2} │ {totalHours,18} │");
+            }
+
+            Console.WriteLine("└──────────────┴────────────────┴────────────────┴────────────────┴────────────────────┴────────────────────┴────────────────────┘");
+        }
+
+        static void AnalyzeEfficiency(List<DaysComparisonResult> resultsV1, List<DaysComparisonResult> resultsV2, int[] daysOptions)
+        {
+            Console.WriteLine("\n┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐");
+            Console.WriteLine("│                                         СРАВНИТЕЛЬНЫЙ АНАЛИЗ ЭФФЕКТИВНОСТИ                                                      │");
+            Console.WriteLine("├──────────────┬──────────────────────────────┬──────────────────────────────┬──────────────────────────────────────────────────┤");
+            Console.WriteLine("│ Дней в одной │        ВАРИАНТ 1             │        ВАРИАНТ 2             │   Общее время моделирования (часов)              │");
+            Console.WriteLine("│ реализации   ├──────────────┬───────────────┼──────────────┬───────────────┼──────────────────────────────────────────────────┤");
+            Console.WriteLine("│              │   N* (необх)  │   Сигма (σ)   │   N* (необх)  │   Сигма (σ)   │   V1               │   V2               │");
+            Console.WriteLine("├──────────────┼──────────────┼───────────────┼──────────────┼───────────────┼────────────────────┼────────────────────┤");
+
+            for (int i = 0; i < daysOptions.Length; i++)
+            {
+                int totalHours = daysOptions[i] * 9;
+                double efficiencyV1 = totalHours * resultsV1[i].RequiredN;
+                double efficiencyV2 = totalHours * resultsV2[i].RequiredN;
+
+                Console.WriteLine($"│ {daysOptions[i],12} │ {resultsV1[i].RequiredN,12:F0} │ {resultsV1[i].Sigma,11:F3} │ {resultsV2[i].RequiredN,12:F0} │ {resultsV2[i].Sigma,11:F3} │ {efficiencyV1,18:F0} │ {efficiencyV2,18:F0} │");
+            }
+
+            Console.WriteLine("└──────────────┴──────────────┴───────────────┴──────────────┴───────────────┴────────────────────┴────────────────────┘");
+
+            
+
+            // Находим оптимальный вариант
+            int bestDaysV1 = daysOptions[0];
+            int bestDaysV2 = daysOptions[0];
+            double bestEfficiencyV1 = daysOptions[0] * 9 * resultsV1[0].RequiredN;
+            double bestEfficiencyV2 = daysOptions[0] * 9 * resultsV2[0].RequiredN;
+
+            for (int i = 1; i < daysOptions.Length; i++)
+            {
+                double effV1 = daysOptions[i] * 9 * resultsV1[i].RequiredN;
+                double effV2 = daysOptions[i] * 9 * resultsV2[i].RequiredN;
+                if (effV1 < bestEfficiencyV1) { bestEfficiencyV1 = effV1; bestDaysV1 = daysOptions[i]; }
+                if (effV2 < bestEfficiencyV2) { bestEfficiencyV2 = effV2; bestDaysV2 = daysOptions[i]; }
+            }
+
+            Console.WriteLine($"\n  Оптимальное количество дней в реализации для ВАРИАНТА 1: {bestDaysV1} дней");
+            Console.WriteLine($"  Оптимальное количество дней в реализации для ВАРИАНТА 2: {bestDaysV2} дней");
         }
     }
 }
