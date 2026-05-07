@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -180,6 +181,8 @@ namespace CafeSimulation
         private const double SIMULATION_TIME = 540;  // 9 часов = 540 минут
         private const int TOTAL_TRAYS = 30;
 
+        private readonly double _groupIntervalMean;  // средний интервал между приходами групп (мин.)
+
         private int _totalCustomers;
         private int _servedCustomers;
         private double _totalSystemTime;
@@ -232,6 +235,7 @@ namespace CafeSimulation
         public double AvgServiceTime { get; private set; }
         public double AvgMealTime { get; private set; }
         public int TotalCustomers { get; private set; }
+        public int ServedCustomers { get; private set; }
         public int FirstDishTaken { get; private set; }
         public int SecondDishTaken { get; private set; }
         public int JuiceTaken { get; private set; }
@@ -246,7 +250,7 @@ namespace CafeSimulation
         public double RejectFirstMealPercent { get; private set; }
         public double RejectDrinkPercent { get; private set; }
 
-        public CafeSimulation()
+        public CafeSimulation(double groupIntervalMean = 3.0)
         {
             _rand = new Random();
             _eventQueue = new PriorityQueue<Event, double>();
@@ -254,6 +258,7 @@ namespace CafeSimulation
             _freeTrays = TOTAL_TRAYS;
             _activeCustomers = 0;
             _currentTime = 0;
+            _groupIntervalMean = groupIntervalMean;
         }
 
         #region Инициализация
@@ -321,10 +326,7 @@ namespace CafeSimulation
 
         private bool CanStartNewCustomer()
         {
-            // Проверяем наличие свободных подносов
-            if (_freeTrays <= 0)
-                return false;
-            return true;
+            return _freeTrays > 0;
         }
 
         private bool IsSimulationComplete()
@@ -338,7 +340,7 @@ namespace CafeSimulation
 
             if (evt.Type == EventType.GroupArrival)
             {
-                double nextInterval = Exponential(3.0);
+                double nextInterval = Exponential(_groupIntervalMean);
                 if (_currentTime + nextInterval < SIMULATION_TIME)
                     ScheduleEvent(EventType.GroupArrival, _currentTime + nextInterval, null);
 
@@ -352,10 +354,7 @@ namespace CafeSimulation
             else if (evt.Type == EventType.CustomerArrival)
             {
                 if (!CanStartNewCustomer())
-                {
-                    // Если нет свободных подносов, посетитель уходит (не обслуживается)
                     return;
-                }
 
                 var customer = evt.Customer;
                 _totalCustomers++;
@@ -707,7 +706,7 @@ namespace CafeSimulation
 
             if (evt.Type == EventType.GroupArrival)
             {
-                double nextInterval = Exponential(3.0);
+                double nextInterval = Exponential(_groupIntervalMean);
                 if (_currentTime + nextInterval < SIMULATION_TIME)
                     ScheduleEvent(EventType.GroupArrival, _currentTime + nextInterval, null);
 
@@ -1043,8 +1042,8 @@ namespace CafeSimulation
                     CompleteServiceV1(evt);
             }
 
-            // Сохраняем результаты
             TotalCustomers = _totalCustomers;
+            ServedCustomers = _servedCustomers;     // сохраняем
             FirstDishTaken = _firstDishTakenV1;
             SecondDishTaken = _secondDishTakenV1;
             JuiceTaken = _juiceTakenV1;
@@ -1082,8 +1081,8 @@ namespace CafeSimulation
                     CompleteServiceV2(evt);
             }
 
-            // Сохраняем результаты
             TotalCustomers = _totalCustomers;
+            ServedCustomers = _servedCustomers;     // сохраняем
             FirstDishTaken = _firstDishTakenV2;
             SecondDishTaken = _secondDishTakenV2;
             SaladTaken = _saladTakenV2;
@@ -1115,7 +1114,6 @@ namespace CafeSimulation
             _totalWaitTime = 0;
             _eventQueue.Clear();
 
-            // Сброс статистики варианта 1
             _firstDishTakenV1 = 0;
             _secondDishTakenV1 = 0;
             _juiceTakenV1 = 0;
@@ -1126,7 +1124,6 @@ namespace CafeSimulation
             _totalServiceTimeV1 = 0;
             _totalMealTimeV1 = 0;
 
-            // Сброс статистики варианта 2
             _firstDishTakenV2 = 0;
             _secondDishTakenV2 = 0;
             _saladTakenV2 = 0;
@@ -1143,218 +1140,49 @@ namespace CafeSimulation
     {
         static void Main(string[] args)
         {
-            Console.OutputEncoding = Encoding.UTF8;
-            Console.WriteLine(" МОДЕЛИРОВАНИЕ РАБОТЫ КАФЕ");
-            Console.WriteLine("Время моделирования: 9 часов (540 минут)");
-            Console.WriteLine("Ограничение: 30 подносов");
-            Console.WriteLine("Запуск моделирования...\n");
+            const int REPLICATIONS_PER_DAY = 7;          // 7 дней
+            const double MIN_INTERVAL = 1.0;             // 1 минута
+            const double MAX_INTERVAL = 30.0;            // 30 минут
+            const double INTERVAL_STEP = 1.0;            // шаг 1 минута
+            string outputFile = "sensitivity_results.csv";
 
-            const double EPSILON = 1.0;        // Заданная точность (в мин.)
-            const double T_ALPHA = 1.895;      // Коэффициент Стьюдента для 90% доверия
-            const int INITIAL_RUNS = 30;        // Начальное количество прогонов
-            const int MAX_ITERATIONS = 10;     // Максимальное количество итераций
-
-            // Моделирование для варианта 1 с обеспечением точности
-            Console.WriteLine(new string('=', 60));
-            Console.WriteLine("ВАРИАНТ 1");
-            Console.WriteLine(new string('=', 60));
-            var resultsV1 = RunWithAccuracy(EPSILON, T_ALPHA, INITIAL_RUNS, MAX_ITERATIONS, runVariant1: true);
-            PrintVariant1Results(resultsV1);
-
-            // Моделирование для варианта 2 с обеспечением точности
-            Console.WriteLine("\n" + new string('=', 60));
-            Console.WriteLine("ВАРИАНТ 2");
-            Console.WriteLine(new string('=', 60));
-            var resultsV2 = RunWithAccuracy(EPSILON, T_ALPHA, INITIAL_RUNS, MAX_ITERATIONS, runVariant1: false);
-            PrintVariant2Results(resultsV2);
-
-            Console.WriteLine("\n" + new string('=', 60));
-            Console.WriteLine("Моделирование завершено. Нажмите любую клавишу для выхода...");
-            Console.ReadKey();
-        }
-
-        class AccuracyResults
-        {
-            public List<double> WaitTimes { get; set; } = new List<double>();
-            public double MeanWaitTime { get; set; }
-            public double Sigma { get; set; }
-            public double RequiredN { get; set; }
-            public int TotalRuns { get; set; }
-            public bool AccuracyAchieved { get; set; }
-            public CafeSimulation LastSimulation { get; set; }
-        }
-
-        static AccuracyResults RunWithAccuracy(double epsilon, double tAlpha, int initialRuns, int maxIterations, bool runVariant1)
-        {
-            var results = new AccuracyResults();
-            int currentRuns = initialRuns;
-            int iteration = 0;
-            bool accuracyAchieved = false;
-
-            while (!accuracyAchieved && iteration < maxIterations)
+            using (var writer = new StreamWriter(outputFile, false, Encoding.UTF8))
             {
-                iteration++;
-                Console.WriteLine($"\n--- ИТЕРАЦИЯ {iteration}: выполняется {currentRuns} прогонов ---");
+                // Заголовок CSV
+                writer.WriteLine("Interval;V1_AvgWait;V2_AvgWait");
 
-                // Выполняем прогоны
-                for (int run = 1; run <= currentRuns; run++)
+                for (double interval = MIN_INTERVAL; interval <= MAX_INTERVAL; interval += INTERVAL_STEP)
                 {
-                    var simulation = new CafeSimulation();
+                    double totalWaitV1 = 0, totalWaitV2 = 0;
+                    int totalServedV1 = 0, totalServedV2 = 0;
 
-                    if (runVariant1)
-                        simulation.RunVariant1();
-                    else
-                        simulation.RunVariant2();
-
-                    results.WaitTimes.Add(simulation.AvgWaitTime);
-                    results.LastSimulation = simulation;
-                }
-
-                // Анализ точности
-                if (results.WaitTimes.Count >= 2)
-                {
-                    double mean = results.WaitTimes.Average();
-                    double variance = results.WaitTimes.Select(v => Math.Pow(v - mean, 2)).Sum() / (results.WaitTimes.Count - 1);
-                    double sigma = Math.Sqrt(variance);
-                    double requiredN = (sigma * sigma / (epsilon * epsilon)) * tAlpha * tAlpha;
-
-                    results.MeanWaitTime = mean;
-                    results.Sigma = sigma;
-                    results.RequiredN = requiredN;
-                    results.TotalRuns = results.WaitTimes.Count;
-
-                    Console.WriteLine($"  Среднее время ожидания: {mean:F3} мин.");
-                    Console.WriteLine($"  Среднеквадратическое отклонение (σ): {sigma:F3} мин.");
-                    Console.WriteLine($"  Необходимое число реализаций (N*): {requiredN:F2}");
-
-                    if (requiredN <= results.WaitTimes.Count)
+                    // Семь независимых прогонов для каждого варианта
+                    for (int day = 0; day < REPLICATIONS_PER_DAY; day++)
                     {
-                        Console.WriteLine($"   Требуемая точность достигнута!");
-                        accuracyAchieved = true;
-                        results.AccuracyAchieved = true;
+                        var simV1 = new CafeSimulation(interval);
+                        simV1.RunVariant1();
+                        totalWaitV1 += simV1.AvgWaitTime * simV1.ServedCustomers;
+                        totalServedV1 += simV1.ServedCustomers;
+
+                        var simV2 = new CafeSimulation(interval);
+                        simV2.RunVariant2();
+                        totalWaitV2 += simV2.AvgWaitTime * simV2.ServedCustomers;
+                        totalServedV2 += simV2.ServedCustomers;
                     }
-                    else
-                    {
-                        int additionalNeeded = (int)Math.Ceiling(requiredN - results.WaitTimes.Count);
-                        Console.WriteLine($"   Требуемая точность НЕ достигнута. Необходимо добавить {additionalNeeded} прогонов.");
-                        currentRuns = additionalNeeded;
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"  Недостаточно данных для анализа точности (нужно минимум 2 прогона)");
-                    currentRuns = 5;
-                }
-            }
 
-            if (!accuracyAchieved)
-            {
-                Console.WriteLine($"\n Внимание: максимальное количество итераций ({maxIterations}) достигнуто.");
-                if (results.WaitTimes.Count > 0)
-                {
-                    results.MeanWaitTime = results.WaitTimes.Average();
+                    double avgWaitV1 = totalServedV1 > 0 ? totalWaitV1 / totalServedV1 : 0;
+                    double avgWaitV2 = totalServedV2 > 0 ? totalWaitV2 / totalServedV2 : 0;
+
+                    // Форматирование чисел с запятой как десятичным разделителем
+                    string intervalStr = interval.ToString("F1", CultureInfo.InvariantCulture).Replace('.', ',');
+                    string avg1Str = avgWaitV1.ToString("F3", CultureInfo.InvariantCulture).Replace('.', ',');
+                    string avg2Str = avgWaitV2.ToString("F3", CultureInfo.InvariantCulture).Replace('.', ',');
+
+                    writer.WriteLine($"{intervalStr};{avg1Str};{avg2Str}");
                 }
             }
 
-            return results;
-        }
-
-        static void PrintVariant1Results(AccuracyResults results)
-        {
-            Console.WriteLine("\n" + new string('=', 60));
-            Console.WriteLine("РЕЗУЛЬТАТЫ МОДЕЛИРОВАНИЯ: ВАРИАНТ 1");
-            Console.WriteLine(new string('=', 60));
-
-            var sim = results.LastSimulation;
-            if (sim != null)
-            {
-                Console.WriteLine($"Моделирование завершено по времени: 9 часов (540 мин.)");
-                Console.WriteLine($"Всего вошло в систему: {sim.TotalCustomers}");
-                Console.WriteLine($"Обслужено полностью: {sim.TotalCustomers}");
-
-                // Вычисляем процент потерянных посетителей из-за отсутствия подносов
-                int lostCustomers = Math.Abs(sim.TotalCustomers - (sim.FirstDishTaken + sim.SecondDishTaken + sim.BreadTaken));
-                Console.WriteLine($"Потеряно из-за отсутствия подносов: {lostCustomers}");
-
-                Console.WriteLine($"Среднее время пребывания в системе: {sim.AvgSystemTime:F2} мин.");
-                Console.WriteLine($"Среднее время ожидания в очередях: {results.MeanWaitTime:F2} мин.");
-
-                Console.WriteLine($"\nСТАТИСТИКА ПО БЛЮДАМ (ВАРИАНТ 1)");
-                Console.WriteLine($"Получили первое блюдо: {sim.FirstDishTaken} ({(sim.FirstDishTaken * 100.0 / sim.TotalCustomers):F1}%)");
-                Console.WriteLine($"Получили второе блюдо: {sim.SecondDishTaken} ({(sim.SecondDishTaken * 100.0 / sim.TotalCustomers):F1}%)");
-                Console.WriteLine($"Взяли сок: {sim.JuiceTaken} ({(sim.JuiceTaken * 100.0 / sim.TotalCustomers):F1}%)");
-                Console.WriteLine($"Взяли чай: {sim.TeaTaken} ({(sim.TeaTaken * 100.0 / sim.TotalCustomers):F1}%)");
-                Console.WriteLine($"Взяли хлебобулочные: {sim.BreadTaken} ({(sim.BreadTaken * 100.0 / sim.TotalCustomers):F1}%)");
-                Console.WriteLine($"Число людей, испытавших возмущающее воздействие: {sim.DisturbanceCount} ({(sim.DisturbanceCount * 100.0 / sim.TotalCustomers):F1}%)");
-                Console.WriteLine($"Число людей, которым не понадобилось обслуживание: {sim.NoServiceNeeded}");
-
-                Console.WriteLine($"Среднее время обслуживания: {sim.AvgServiceTime:F2} мин.");
-                Console.WriteLine($"Среднее время получения обеда: {sim.AvgMealTime:F2} мин.");
-                Console.WriteLine($"Загруженность кассы: {(sim.AvgServiceTime > 0 ? (sim.AvgServiceTime / sim.AvgSystemTime * 100) : 0):F1}% от времени в системе");
-            }
-
-            // Вывод информации о точности
-            Console.WriteLine($"\n--- ОБЕСПЕЧЕНИЕ ТОЧНОСТИ ---");
-            Console.WriteLine($"Всего выполнено прогонов: {results.TotalRuns}");
-            Console.WriteLine($"Среднее время ожидания: {results.MeanWaitTime:F2} мин.");
-            Console.WriteLine($"Среднеквадратическое отклонение (σ): {results.Sigma:F3} мин.");
-            Console.WriteLine($"Необходимое число реализаций (N*): {results.RequiredN:F2}");
-
-            const double T_ALPHA = 1.895;
-            double intervalHalfWidth = T_ALPHA * results.Sigma / Math.Sqrt(results.TotalRuns);
-            Console.WriteLine($"Доверительный интервал для среднего (90%): [{results.MeanWaitTime - intervalHalfWidth:F3}; {results.MeanWaitTime + intervalHalfWidth:F3}] мин.");
-            Console.WriteLine($"Точность {(results.AccuracyAchieved ? "обеспечена" : "НЕ обеспечена")}");
-        }
-
-        static void PrintVariant2Results(AccuracyResults results)
-        {
-            Console.WriteLine("\n" + new string('=', 60));
-            Console.WriteLine("РЕЗУЛЬТАТЫ МОДЕЛИРОВАНИЯ: ВАРИАНТ 2");
-            Console.WriteLine(new string('=', 60));
-
-            var sim = results.LastSimulation;
-            if (sim != null)
-            {
-                Console.WriteLine($"Моделирование завершено по времени: 9 часов (540 мин.)");
-                Console.WriteLine($"Всего вошло в систему: {sim.TotalCustomers}");
-                Console.WriteLine($"Обслужено полностью: {sim.TotalCustomers}");
-
-                // Вычисляем процент потерянных посетителей из-за отсутствия подносов
-                int lostCustomers = Math.Abs(sim.TotalCustomers - (sim.FirstDishTaken + sim.SecondDishTaken + sim.SaladTaken));
-                Console.WriteLine($"Потеряно из-за отсутствия подносов: {lostCustomers}");
-
-                Console.WriteLine($"Среднее время пребывания в системе: {sim.AvgSystemTime:F2} мин.");
-                Console.WriteLine($"Среднее время ожидания в очередях: {results.MeanWaitTime:F2} мин.");
-
-                Console.WriteLine($"\nСТАТИСТИКА ПО БЛЮДАМ (ВАРИАНТ 2)");
-                Console.WriteLine($"Получили первое блюдо: {sim.FirstDishTaken} ({(sim.FirstDishTaken * 100.0 / sim.TotalCustomers):F1}%)");
-                Console.WriteLine($"Получили второе блюдо: {sim.SecondDishTaken} ({(sim.SecondDishTaken * 100.0 / sim.TotalCustomers):F1}%)");
-                Console.WriteLine($"Получили салат: {sim.SaladTaken} ({(sim.SaladTaken * 100.0 / sim.TotalCustomers):F1}%)");
-                Console.WriteLine($"Получили напиток: {sim.DrinkTaken} ({(sim.DrinkTaken * 100.0 / sim.TotalCustomers):F1}%)");
-                Console.WriteLine($"Число людей, которым не понадобилось обслуживание: {sim.NoServiceNeeded}");
-
-                Console.WriteLine($"Среднее время обслуживания: {sim.AvgServiceTime:F2} мин.");
-                Console.WriteLine($"Среднее время получения обеда: {sim.AvgMealTime:F2} мин.");
-                Console.WriteLine($"Загруженность кассы: {(sim.AvgServiceTime > 0 ? (sim.AvgServiceTime / sim.AvgSystemTime * 100) : 0):F1}% от времени в системе");
-
-                Console.WriteLine($"\n--- Отказы ---");
-                Console.WriteLine($"Отказов от первого блюда: {sim.RejectFirstMealResult}");
-                Console.WriteLine($"Отказов от напитка: {sim.RejectDrinkResult}");
-                Console.WriteLine($"Доля отказов от первого блюда: {sim.RejectFirstMealPercent:F1}%");
-                Console.WriteLine($"Доля отказов от напитка: {sim.RejectDrinkPercent:F1}%");
-            }
-
-            // Вывод информации о точности
-            Console.WriteLine($"\n--- ОБЕСПЕЧЕНИЕ ТОЧНОСТИ ---");
-            Console.WriteLine($"Всего выполнено прогонов: {results.TotalRuns}");
-            Console.WriteLine($"Среднее время ожидания: {results.MeanWaitTime:F2} мин.");
-            Console.WriteLine($"Среднеквадратическое отклонение (σ): {results.Sigma:F3} мин.");
-            Console.WriteLine($"Необходимое число реализаций (N*): {results.RequiredN:F2}");
-
-            const double T_ALPHA = 1.895;
-            double intervalHalfWidth = T_ALPHA * results.Sigma / Math.Sqrt(results.TotalRuns);
-            Console.WriteLine($"Доверительный интервал для среднего (90%): [{results.MeanWaitTime - intervalHalfWidth:F3}; {results.MeanWaitTime + intervalHalfWidth:F3}] мин.");
-            Console.WriteLine($"Точность {(results.AccuracyAchieved ? "обеспечена" : "НЕ обеспечена")}");
+            Console.WriteLine($"Файл {outputFile} успешно создан.");
         }
     }
 }
